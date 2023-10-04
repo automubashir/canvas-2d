@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Canvas-2D</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css"
+        integrity="sha512-z3gLpd7yknf1YoNbCzqRKc4qyor8gaKU1qmn+CShxbuBusANI9QpRohGBreCFkKxLhei6S9CQXFEbbKuqLg0DA=="
+        crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 100%;
+            height: 100vh;
+            overflow: hidden;
+            background-color: #222;
+        }
+
+        canvas {
+            background-image: url(./assets/checker.svg);
+            background-size: 1%;
+            background-attachment: fixed;
+            cursor: none;
+            /* cursor: url(https://cur.cursors-4u.net/movie/mov-1/mov31.ani), url(https://cur.cursors-4u.net/movie/mov-1/mov31.png), auto !important; */
+        }
+
+        [tool*=tselector] canvas {
+            cursor: default;
+        }
+
+        container {
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+        }
+
+        inner {
+            --stroke_size: 10px;
+        }
+
+        toolbar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 50px;
+            height: 100vh;
+            overflow-y: auto;
+            padding: 0.5rem 0.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            background-color: #444;
+        }
+
+        titem {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            line-height: normal;
+            color: #f2f2f2;
+            background-color: transparent;
+            padding: 0.5rem 0;
+            position: relative;
+            border-radius: 4px;
+        }
+
+        titem:hover {
+            background-color: #555;
+        }
+
+        titem>* {
+            pointer-events: none;
+        }
+
+        [tactive] {
+            background-color: #555;
+            border-radius: 0 4px 4px 0;
+        }
+
+        [tactive]::before {
+            content: '';
+            position: absolute;
+            left: -5px;
+            top: 0;
+            bottom: 0;
+            width: 5px;
+            background-color: dodgerblue;
+        }
+
+        cursor {
+            display: none;
+            position: fixed;
+            color: #000;
+            z-index: 99999999;
+            pointer-events: none;
+            transform: translate(-50%, -50%);
+            width: var(--stroke_size);
+            height: var(--stroke_size);
+            border-radius: 50%;
+            box-shadow: 0px 0px 0px 0.5px rgba(0, 0, 0, 1), 
+                        0px 0px 0px 1px rgba(210,210,210,1);
+        }
+
+        inner[onboard] cursor {
+            display: inline-block;
+        }
+
+        [tool*=tselector] cursor {
+            display: none !important;
+        }
+    </style>
+</head>
+
+<body>
+    <container>
+        <inner>
+            <confbar>
+                <citem>
+                    <cstrokesize class="fa fa-resize"></cstrokesize>
+                </citem>
+            </confbar>
+            <canvas id="mycanvas" width="" height=""></canvas>
+            <toolbar>
+                <titem tactive title="Selector tool">
+                    <tselector class="fa fa-arrow-pointer"></tselector>
+                </titem>
+                <titem title="Pencil tool">
+                    <tpencil class="fa fa-pencil"></tpencil>
+                </titem>
+                <titem title="Brush tool">
+                    <tbrush class="fa fa-brush"></tbrush>
+                </titem>
+                <titem title="Eraser tool">
+                    <teraser class="fa fa-eraser"></teraser>
+                </titem>
+            </toolbar>
+            <cursor></cursor>
+        </inner>
+    </container>
+
+    <!-- strokes -->
+    <script>
+        var strokes = {
+            tselector: {
+                selected: "1",
+                default: "1"
+            },
+            tpencil: {
+                selected: "1",
+                default: "1"
+            },
+            tbrush: {
+                selected: "4",
+                default: "4"
+            },
+            teraser: {
+                selected: "4",
+                default: "4"
+            },
+        }
+    </script>
+
+    <!-- canvas -->
+    <script>
+        var canvas = document.querySelector("#mycanvas")
+        var cursor = document.querySelector("cursor")
+        var inner = document.querySelector("inner")
+        inner.setAttribute("style", "")
+
+        resizeCanvas(1200, 630);
+        var c = canvas.getContext('2d')
+        var stroke = false;
+        var pointer = {
+            x: null,
+            y: null
+        }
+        var cursors = {
+            tpencil: "fa fa-pencil",
+            tbrush: "fa fa-brush",
+            teraser: "fa fa-eraser",
+            grosshair: "fa fa-grosshair",
+            default: "fa fa-arrow-pointer",
+            circle: "fa fa-circle",
+            square: "fa fa-square",
+        }
+        var scale = {
+            x: 1,
+            y: 1,
+        }
+
+        setStroke('tselector')
+
+        function draw(x, y) {
+            switch (selected_titem.nodeName.toLowerCase()) {
+                case "teraser": {
+                    c.globalCompositeOperation = "destination-out";
+                    c.lineTo(x, y);
+                    c.stroke()
+                    break;
+                }
+                case "tselector": {
+                    c.drawImage(canvas, x, y)
+                    break;
+                }
+                default: {
+                    c.globalCompositeOperation = "source-over"
+                    c.lineTo(x, y);
+                    c.stroke();
+                }
+            }
+        }
+
+        function setJunk(key, value) {
+            let styles_ = inner.getAttribute("style").split(';')
+            styles_ = styles_.map(x => {
+                if (x.includes('--' + key)) {
+                    return '--' + key + ':' + value
+                }
+            })
+            if (!JSON.stringify(styles_).includes(key)) {
+                styles_.push("--" + key + ":" + value)
+            }
+            inner.setAttribute("style", styles_.join(";"))
+        }
+
+        function setStrokeSize(size) {
+            setJunk('stroke_size', size + "px")
+        }
+
+        function setStroke(type) {
+            inner.setAttribute("tool",type)
+            c.lineWidth = strokes[type]?.selected;
+            c.lineCap = 'rounded'
+            setStrokeSize(strokes[type]?.selected)
+        }
+
+        function setScale(x, y) {
+            scale.x = x;
+            scale.y = y;
+            c.scale(x, y)
+        }
+
+        function setCursor(type) {
+            cursor.setAttribute("class", cursors[type])
+        }
+
+        function moveCursor(x, y) {
+            cursor.setAttribute("style", "left:" + x + "px; top:" + y + "px;")
+        }
+
+        function activateArtboard(e) {
+            if (e.pageX <= canvas.offsetLeft + canvas.clientWidth &&
+                e.pageX >= canvas.offsetLeft &&
+                e.pageY <= canvas.offsetTop + canvas.clientHeight &&
+                e.pageY >= canvas.offsetTop) {
+                inner.setAttribute("onboard", "true")
+            } else {
+                inner.removeAttribute("onboard")
+            }
+        }
+
+        function resetCanvas() {
+            // Store the current transformation matrix
+            c.save();
+
+            // Use the identity matrix while clearing the canvas
+            c.setTransform(1, 0, 0, 1, 0, 0);
+            c.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Restore the transform
+            c.restore();
+        }
+
+
+        window.onload = function () {
+            window.addEventListener('mousedown', (e) => {
+                if (e.which != '1') return;
+                stroke = true;
+                c.beginPath();
+            })
+            window.addEventListener('mouseup', (e) => {
+                stroke = false;
+            })
+            window.addEventListener('mousemove', (e) => {
+                activateArtboard(e);
+                moveCursor(e.pageX, e.pageY)
+                pointer.x = e.pageX - canvas.offsetLeft;
+                pointer.y = e.pageY - canvas.offsetTop;
+                if (!stroke) return;
+                draw(pointer.x, pointer.y)
+            })
+            window.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+            })
+            window.addEventListener('resize', (e) => {
+                // let temp_c = canvas.cloneNode(true);
+                // temp_c.removeAttribute("id");
+                // temp_c.getContext('2d').drawImage(canvas, 0, 0)
+                // c.drawImage(temp_c, 0, 0)
+                // temp_c.remove();
+            })
+        }
+
+        function getContext() {
+            c = canvas.getContext('2d');
+        }
+
+        function resizeCanvas(x, y) {
+            canvas.setAttribute("width", x + "px")
+            canvas.setAttribute("height", y + "px")
+        }
+
+    </script>
+
+    <!-- toolbar -->
+    <script>
+        var selected_titem = document.querySelector("tselector");
+        var prev_titem = null;
+        document.querySelectorAll("titem").forEach(x => {
+            x.addEventListener('click', (e) => {
+                prev_titem = selected_titem;
+                selected_titem = e.target.children?.[0]
+                selected_titem.parentElement.setAttribute('tactive', '')
+                prev_titem.parentElement.removeAttribute('tactive')
+                let type = selected_titem.nodeName.toLowerCase();
+                // setCursor(type)
+                setStroke(type)
+            })
+        })
+    </script>
+
+
+</body>
+
+</html>
